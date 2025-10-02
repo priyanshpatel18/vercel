@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import fs from "fs";
 import path from "path";
 
@@ -11,21 +11,16 @@ const s3 = new S3Client({
   },
 });
 
-export async function downloadBuild(id: string, destPath: string) {
-  fs.mkdirSync(destPath, { recursive: true });
+export async function downloadBuild(id: string, dest: string) {
+  fs.mkdirSync(dest, { recursive: true });
+  const obj = await s3.send(
+    new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: `builds/${id}/index.js`,
+    })
+  );
 
-  const list = await s3.send(new ListObjectsV2Command({
-    Bucket: process.env.R2_BUCKET_NAME,
-    Prefix: `builds/${id}/`,
-  }));
-
-  for (const obj of list.Contents ?? []) {
-    const key = obj.Key!;
-    const filePath = path.join(destPath, key.replace(`builds/${id}/`, ""));
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-
-    const data = await s3.send(new GetObjectCommand({ Bucket: process.env.R2_BUCKET_NAME, Key: key }));
-    const body = await data.Body?.transformToByteArray();
-    if (body) fs.writeFileSync(filePath, Buffer.from(body));
-  }
+  const body = await obj.Body?.transformToByteArray();
+  if (!body) throw new Error("Build not found in S3");
+  fs.writeFileSync(path.join(dest, "index.js"), Buffer.from(body));
 }
