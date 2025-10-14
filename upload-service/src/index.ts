@@ -82,5 +82,6 @@ app.get("/deploy/status/:id", async (req, res) => {
 });
 
 app.listen(PORT, () => {
+  deletePrefix()
   console.log(`Listening to port ${PORT}`);
 });

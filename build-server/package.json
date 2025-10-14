@@ -1,0 +1,16 @@
+{
+  "name": "build-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "script.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.908.0",
+    "dotenv": "^17.2.3",
+    "ioredis": "^5.8.1",
+    "mime-types": "^3.0.1"
+  }
+}

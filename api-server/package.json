@@ -1,0 +1,16 @@
+{
+  "name": "api-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-ecs": "^3.908.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "random-word-slugs": "^0.1.7"
+  }
+}
