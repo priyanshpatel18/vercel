@@ -1,10 +1,13 @@
-import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs'
-import "dotenv/config"
-import express, { json } from 'express'
-import { generateSlug } from 'random-word-slugs'
+import { ECSClient, RunTaskCommand } from '@aws-sdk/client-ecs';
+import "dotenv/config";
+import express, { json } from 'express';
+import { generateSlug } from 'random-word-slugs';
+import Redis from 'ioredis';
 
-const app = express()
-const PORT = 9000
+const app = express();
+const PORT = 9000;
+
+const redis = new Redis({ host: '127.0.0.1', port: 6379 });
 
 const {
   AWS_ACCESS_KEY_ID,
@@ -13,8 +16,8 @@ const {
   R2_KEY_ID,
   R2_SECRET_KEY,
   R2_ENDPOINT,
-  CLUSTER,
-  TASK
+  ECS_CLUSTER,
+  ECS_TASK
 } = process.env;
 
 const ecsClient = new ECSClient({
@@ -23,47 +26,55 @@ const ecsClient = new ECSClient({
     accessKeyId: AWS_ACCESS_KEY_ID,
     secretAccessKey: AWS_SECRET_ACCESS_KEY
   }
-})
+});
 
-app.use(json())
+app.use(json());
 
 app.post('/project', async (req, res) => {
-  const { gitURL, slug } = req.body
-  const projectSlug = slug ? slug : generateSlug()
+  try {
+    const { gitURL, slug } = req.body;
+    const projectSlug = slug || generateSlug();
 
-  // Spin the container
-  const command = new RunTaskCommand({
-    cluster: CLUSTER,
-    taskDefinition: TASK,
-    launchType: 'FARGATE',
-    count: 1,
-    networkConfiguration: {
-      awsvpcConfiguration: {
-        assignPublicIp: 'ENABLED',
-        subnets: ['subnet-0a24c83ceffbba94f', 'subnet-0de66aa241030947a', 'subnet-025c6e1e68349829f '],
-        securityGroups: ['sg-0694778b265b0fe07']
+    // Spin the ECS EC2 container
+    const command = new RunTaskCommand({
+      cluster: ECS_CLUSTER,
+      taskDefinition: ECS_TASK,
+      launchType: 'EC2',
+      count: 1,p
+      overrides: {
+        containerOverrides: [
+          {
+            name: 'process-runner',
+            environment: [
+              { name: 'GIT_REPOSITORY__URL', value: gitURL },
+              { name: 'AWS_ACCESS_KEY_ID', value: R2_KEY_ID },
+              { name: 'AWS_SECRET_ACCESS_KEY', value: R2_SECRET_KEY },
+              { name: 'AWS_REGION', value: "auto" },
+              { name: 'R2_ENDPOINT', value: R2_ENDPOINT },
+              { name: 'PROJECT_ID', value: projectSlug }
+            ]
+          }
+        ]
       }
-    },
-    overrides: {
-      containerOverrides: [
-        {
-          name: 'builder-image',
-          environment: [
-            { name: 'GIT_REPOSITORY__URL', value: gitURL },
-            { name: 'AWS_ACCESS_KEY_ID', value: R2_KEY_ID },
-            { name: 'AWS_SECRET_ACCESS_KEY', value: R2_SECRET_KEY },
-            { name: 'AWS_REGION', value: "auto" },
-            { name: 'R2_ENDPOINT', value: R2_ENDPOINT },
-            { name: 'PROJECT_ID', value: projectSlug }
-          ]
-        }
-      ]
-    }
-  });
+    });
 
-  await ecsClient.send(command);
+    const result = await ecsClient.send(command);
 
-  return res.json({ status: 'queued', data: { projectSlug, url: `http://${projectSlug}.localhost:8000` } })
-})
+    const hostPort = result.tasks[0].containers[0].networkBindings[0].hostPort;
 
-app.listen(PORT, () => console.log(`API Server Running on port ${PORT}`))
+    await redis.set(`project:${projectSlug}`, JSON.stringify({ taskArn: result.tasks[0].taskArn }));
+
+    res.json({
+      status: 'queued',
+      data: {
+        projectSlug,
+        url: `http://${EC2_PUBLIC_IP}:${hostPort}`
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.listen(PORT, () => console.log(`API Server Running on port ${PORT}`));
